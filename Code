@@ -13,3 +13,389 @@ for i = 1:length(t)
 end
 end
 
+function [signal] =burst(time, amplitude,frequency)
+%The function generates a burst wave with the given parameters.This in the
+%same way as the defined burst in the LabVIEW program 'GenerateWaveform'.
+
+%Opm: length(time)*0.01 has to be an integer.
+
+n = 0.01*length(time);
+%m = floor((length(time) -n)/2);
+m = (length(time)-n)/2;
+sine = amplitude*sin(2*pi*frequency*time(m+1:m+n));
+zero1 = zeros(1,m);
+zero2 = zeros(1,length(time)-length(zero1)-length(sine));
+
+signal = [zero1,sine,zero2];
+end
+
+function [deltaDirac] = delta(x)
+%De functie geeft de functiewaardes in de delta-dirac functie terug voor de
+%lijst van waardes x.
+
+%Opm: de functie 'dirac(x)' uit 'Symbolic Math Toolbox', kan niet gebruikt
+%worden, omdat deze 'inf' als waarde geeft. Hier kan niet verder mee
+%gerekend worden.
+
+deltaDirac = zeros(1,length(x));
+for i = 1:length(x)
+    if x(i) == 0
+        deltaDirac(i) = realmax;
+    end
+end
+end
+
+function [S] = triangle(t,dutycycle, hoogte, periode)
+% De functie geeft de driehoekfunctiewaarde van de input waardes en
+% paramters.
+%   t;list, de tijdswaarden.
+tau = periode*dutycycle;
+n = floor(t/periode);
+S = 0;
+if (n*periode <= t) && (t <= n*periode + tau)
+    S = -(hoogte/tau)*(t-n*periode) + hoogte;
+end
+end
+
+function [output] = filterGemaakt(input, type, weerstand, capaciteit)
+%De functie bepaalt voor een input signaal de output door een filter,
+%gespecifieerd door type, weerstand en capaciteit.
+%   type; str, moet 'high', 'low' of 'band' zijn en staat voor de type
+%   filter. ('high' = high pass filter, 'low' = low pass filter, 'band' =
+%   band pass filter)
+%   weerstand; list/float, de waarde van de weerstand(en) in Ohm.
+%   capaciteit; list/float, de waarde van de capaciteit(en) in Farad.
+%   input; array, in de eerste rij de tijdswaarden en in de tweede rij
+%   de signaal amplitudes. De samplingrate is berekenbaar uit de
+%   tijdswaarden.
+%
+%Opm: als type = 'band', moeten weerstand en capaciteit twee waarden
+%bevatten, met als eerste de waardes bij de high pass filter en als tweede
+%die bij de low pass filter.
+%Opm: pas eventueel de plot input waarden aan indien de amplitude in dB
+%gewenst is. Analoog kan ook de schaal van de frequenties veranderd worden
+%naar log schaal.
+
+n = length(input(1,:));
+samplingrate = n/(input(1,n) - input(1,1)); %Opm; moet geheel zijn.
+if samplingrate - floor(samplingrate) ~= 0
+    error('Chose other timevalues, such that the sampling rate is an integer.', 7678)
+else
+    %bepaal de fouriercoëfficiënten bij de frequenties.
+    fourier=fft(input(2,:));
+    fourierShifted = fftshift(fourier);
+    n = (length(fourier)-1)/2;
+    freq=(-n:n)*samplingrate/(length(fourier));
+
+    %bepaal de output door de filter (formules uit de slides van signaal
+    %analyse overgenomen).
+    if  strcmp(type, 'high') == true   %type == 'high'
+        f0 = 1./(2*pi*weerstand.*capaciteit);
+        wVerhouding = freq/(f0);
+        sFilter = 1i.*wVerhouding./(1i.*wVerhouding + 1);
+
+        outputCoeff = sFilter.*fourierShifted;
+
+        plot(freq(n+1:end), abs(fourierShifted(n+1:end))/length(fourier(n+1:end)))
+            %20*log10(abs(fourierShifted(n+1:end))/length(fourier(n+1:end))))
+        hold on
+        plot(freq(n+1:end), abs(outputCoeff(n+1:end))/length(fourier(n+1:end)))
+            %20*log10(abs(outputCoeff(n+1:end))/length(fourier(n+1:end))))
+        legend("input signal", "output signal")
+        xlabel('frequencies')
+        ylabel('amplitudes')
+        title('Fouriertransform high pass filter')
+        %xscale log
+        hold off
+        output = ifft(ifftshift(outputCoeff));
+
+    elseif  strcmp(type, 'low') == true   %type == 'low'
+        f0 = 1./(2*pi*weerstand.*capaciteit);
+        wVerhouding = freq/(f0);
+        sFilter = (1./(1i.*wVerhouding + 1));
+        
+        outputCoeff = sFilter.*fourierShifted; %abs(sFilter).*exp(1i*faseFilter)
+
+        plot(freq(n+1:end), abs(fourierShifted(n+1:end))/length(fourier(n+1:end)))
+            %20*log10(abs(fourierShifted(n+1:end))/length(fourier(n+1:end))))
+        hold on
+        plot(freq(n+1:end), abs(outputCoeff(n+1:end))/length(fourier(n+1:end)))
+            %20*log10(abs(outputCoeff(n+1:end))/length(fourier(n+1:end))))
+        legend("input signal", "output signal")
+        xlabel('frequencies')
+        ylabel('amplitudes')
+        title('Fouriertransform low pass filter')
+        %xscale log
+        hold off
+        output = ifft(ifftshift(outputCoeff));
+    
+    elseif strcmp(type, 'band')==true   %type == 'band'
+        f0 = 1./(2*pi*weerstand.*capaciteit);
+        wVerhoudingHPF = freq./(f0(1));
+        wVerhoudingLPF = freq./(f0(2));
+
+        outputCoeff = ((1i.*wVerhoudingHPF)./(1i.*wVerhoudingHPF + 1)).*(1./(1i.*wVerhoudingLPF + 1)).*fourierShifted; %S(band)=S(HPF)*S(LPF)
+        
+        plot(freq(n+1:end), abs(fourierShifted(n+1:end))/length(fourier(n+1:end)))
+            %20*log10(abs(fourierShifted(n+1:end))/length(fourier(n+1:end))))
+        hold on
+        plot(freq(n+1:end), abs(outputCoeff(n+1:end))/length(fourier(n+1:end)))
+            %20*log10(abs(outputCoeff(n+1:end))/length(fourier(n+1:end))))
+        legend("input signal", "output signal")
+        xlabel('frequencies')
+        ylabel('amplitudes')
+        title('Fouriertransform bandpass filter')
+        %xscale log
+        hold off
+
+        output = ifft(ifftshift(outputCoeff));
+    else
+        hold off
+        error('This value for "type" is not allowed. Choose out of "low", "high" or "band".',8456)
+    end
+end
+end
+
+function [freq, response] = responsIFVfilter(type, resistance, capacity)
+%De functie bepaalt de respons van een filter in functie van de frequentie 
+%en zet die uit in een plot. De gebrukte formule werd op voorhand berekend.
+%   type; int, geeft aan welke filter. We nummeren de filters. Zo is 1:
+%   low pass 1e orde, 2: high pass 1e orde, 3: bandpass 1e orde, ...
+%   resistance; de weerstandswaarden in de volgorde waarin ze voorkomen in
+%   de schakelingen
+%   capacity; de capaciteiten in de volgorde waarin ze voorkomen
+
+%Opm: als type = 3, moeten weerstand en capaciteit twee waarden
+%bevatten, met als eerste de waardes bij de high pass filter en als tweede
+%die bij de low pass filter.
+
+
+if  type == 1 %LPF 1e orde. R, C
+    f0 = 1./(2*pi*resistance.*capacity);
+    freq = linspace(0,2*f0,10000);
+    wVerhouding = freq/(f0);
+    response = abs(1./(1i.*wVerhouding + 1));
+    [cutoff, ~] = getCutoffAndOrder('low', resistance, capacity);
+elseif type == 2 %HPF 1e orde. C,R
+    f0 = 1./(2*pi*resistance.*capacity);
+    freq = linspace(.5*f0,10*f0,10000);
+    wVerhouding = freq/(f0);
+    response = abs(1i.*wVerhouding./(1i.*wVerhouding + 1));
+    [cutoff, ~] = getCutoffAndOrder('high', resistance, capacity);
+elseif type == 3 %bandpass 1e orde. C1, R1, C2, R2
+    f0 = 1./(2*pi*resistance.*capacity);
+    freq = linspace(0,5*f0(2),1000000);
+    wVerhoudingHPF = freq./(f0(1));
+    wVerhoudingLPF = freq./(f0(2));
+    response = abs((1i.*wVerhoudingHPF)./(1i.*wVerhoudingHPF + 1)).*(1./(1i.*wVerhoudingLPF + 1));
+    
+    [cutoff, ~] = getCutoffAndOrder('band', resistance, capacity);
+else
+    error('Filter does not (yet) exsist.', 9876)
+end
+plot(freq, 20*log10(response))
+xline(cutoff(1),'k')
+xline(cutoff(2),'k')
+title('Response filter')
+legend('Response filter','Cutoff frequency')
+xlabel('frequencies')
+ylabel('20*log(amplitudes)')
+xscale log
+
+end
+
+function [cutoff, orde] = getCutoffAndOrder(type,weerstand, capaciteit,data)
+%fc = wc/2π = 1/2πRC
+%De functie bepaald afhankelijk van het type filter (met bijhorende
+%weerstand- en capaciteitwaarden) de orde en cutoff frequentie.
+%   type; str, moet 'high', 'low' of 'band' zijn en staat voor de type
+%   filter. ('high' = high pass filter, 'low' = low pass filter, 'band' =
+%   band pass filter)
+%   weerstand; list/float, de waarde van de weerstand(en) in Ohm.
+%   capaciteit; list/float, de waarde van de capaciteit(en) in Farad.
+%
+%Opm: als type = 'band', moeten weerstand en capaciteit twee waarden
+%bevatten, met als eerste de waardes bij de high pass filter en als tweede
+%die bij de low pass filter.
+
+%Probleem: hoe bepalen we de orde?
+f0 = 1./(2*pi*weerstand.*capaciteit);
+
+if  strcmp(type, 'low')== true || strcmp(type, 'high') == true   %type == 'low' || type == 'high'
+    cutoff = f0; 
+    % dit is de f0 van een LPF of HPF. (zie slides signaal analyse + eenvoudig te berekenen)
+elseif strcmp(type, 'band') == true %type =='band'
+    MsoOut=data.mso_1; %Output
+MsoIn=data.mso_2; %Input
+tijd=linspace(0,1,height(MsoIn));
+
+%Fourier toepassen op de in- en output
+fourierI=fft(MsoIn);
+fourierShiftedI=fftshift(fourierI);
+fourierU=fft(MsoOut);
+fourierShiftedU=fftshift(fourierU);
+freq=(-(length(fourierI)-1)/2:(length(fourierI)-1)/2)*length(tijd)/length(fourierI);
+
+f0Theorie = 1./(2*pi*weerstand.*capaciteit);
+
+%Effect filter bepalen
+%Gezien I*S=U vormen we om naar S=U/I om S te bepalen.
+sFilterExp=fourierShiftedU./fourierShiftedI;
+sFilterExpDb=20*log10(abs(sFilterExp));
+%Nu nemen we een interval rond het minimum om zo een fitting te kunnen
+%uitvoeren.
+fZoekrange=linspace(f0Theorie-50,f0Theorie+50,1000);
+nf=length(fZoekrange);
+fout0=inf;
+for iF=1:nf
+    Ymod=arrayfun(@(x) 20*log10(abs(1/sqrt(1+(x/fZoekrange(iF))^2))),freq);
+    fout=chi2(length(sFilterExpDb),1,sFilterExpDb,Ymod',1);
+    if fout<fout0
+        fout0=fout;
+        fBest=fZoekrange(iF);
+    end
+end
+sFilterModelDb=arrayfun(@(x) 20*log10(abs(1/sqrt(1+(x/fBest)^2))),freq);
+fZoekrange=linspace(fBest-fBest/2,fBest+fBest/2,nf);
+chi_f=zeros(size(fZoekrange));
+for iF=1:nf
+    Ymod=arrayfun(@(x) 20*log10(abs(1/sqrt(1+(x/fZoekrange(iF))^2))),freq);
+    chi_f(iF)=chi2(length(sFilterExpDb),1,sFilterExpDb,Ymod',1);
+end
+
+%Nu bepalen we de variantie op de parameter.
+Pf=polyfit(fZoekrange,chi_f,2);
+fitparabool_f=polyval(Pf,fZoekrange);
+Min_f=min(fitparabool_f);
+fitparabool_f=fitparabool_f/Min_f;
+kromming_f=2*Pf(1);
+sigma_f=1/sqrt(length(freq)*kromming_f/2);
+
+%Tot slot zoeken we de waarden die zich 3dB onder het max bevinden.
+%Eerst het max
+[maximum,maxIndx]=max(sFilterModelDb);
+[min1,minIndxLinks]=min(sFilterModelDb(1:maxIndx-1)/maximum-3);
+[min2,minIndxRechts]=min(sFilterModelDb(maxIndx+1:end)/maximum-3);
+cutoff=[freq(minIndxLinks) freq(minIndxRechts)];
+orde=1;
+else
+    error('This value for "type" is not allowed. Choose out of "low", "high" or "band".',8456)
+end
+orde = 1; %aantal capaciteiten en spoelen in de filter. Maar niet zo voor combinatie denk ik. (Of # 6 dB/octaaf de stijlheid van de filter is. Met een octaaf de frequentie-verdubbeling/-halvering)
+% via octaaf enzo: enkel gebruiken indien dit nuttig blijkt. Maar geen idee hoe we dit bepalen.
+
+% orde = (rico van de rechte f0/2 tot intensiteit = 0 )/6.
+end
+
+%% processingData
+infoFilter(ZLPF1,3910,0.1*(10^(-6)))
+[f01,sigma_f01]=bepalenCutoff(ZLPF1,3910,0.1*(10^(-6)),sFilterExpDb1);
+[f0Theorie1,Orde1]=getCutoffAndOrder('low',3910,0.1*(10^(-6)));
+%f0Theorie=407.0459
+%f0Exp=405 +/- 5
+
+infoFilter(ZLPF2,3880,0.1*(10^(-6)))
+[f02,sigma_f02,sFilterExpDb2]=bepalenCutoff(ZLPF2,3880,0.1*(10^(-6)));
+[f0Theorie2,Orde2]=getCutoffAndOrder('low',3880,0.1*(10^(-6)));
+%f0Theorie=410.1932
+%f0Exp=408.25 +/- 5
+
+infoFilter(ZLPF3,1972,0.1*(10^(-6)))
+[f03,sigma_f03,sFilterExpDb3]=bepalenCutoff(ZLPF3,1972,0.1*(10^(-6)));
+[f0Theorie3,Orde3]=getCutoffAndOrder('low',1972,0.1*(10^(-6)));
+%f0Theorie=807.0737
+%f0Exp=804.75 +/- 6.25
+
+infoFilter(ZLPF4,1782,0.1*(10^(-6)))
+[f04,sigma_f04,sFilterExpDb4]=bepalenCutoff(ZLPF4,1782,0.1*(10^(-6)));
+[f0Theorie4,Orde4]=getCutoffAndOrder('low',1782,0.1*(10^(-6)));
+%f0Theorie=893.1254
+%f0Exp=893.25 +/- 8.75
+
+infoFilter(ZLPF5,1991,0.1*(10^(-6)))
+[f05,sigma_f05,sFilterExpDb5]=bepalenCutoff(ZLPF5,1991,0.1*(10^(-6)));
+[f0Theorie5,Orde5]=getCutoffAndOrder('low',1991,0.1*(10^(-6)));
+%f0Theorie=799.3719
+%f0Exp=796.5 +/- 12
+
+infoFilter(ZLPF8,1789,0.1*(10^(-6)))
+[f08,sigma_f08,sFilterExpDb8]=bepalenCutoff(ZLPF8,1789,0.1*(10^(-6)));
+[f0Theorie8,Orde8]=getCutoffAndOrder('low',1789,0.1*(10^(-6)));
+%f0Theorie=889.6308
+%f0Exp=889.5 +/- 10.5
+
+infoFilter(ZLPF9,6170,0.1*(10^(-6)))
+[f09,sigma_f09,sFilterExpDb9]=bepalenCutoff(ZLPF8,6170,0.1*(10^(-6)));
+[f0Theorie9,Orde9]=getCutoffAndOrder('low',6170,0.1*(10^(-6)));
+%f0Theorie=257.9497
+%f0Exp=270.5 +/- 21.5
+
+FiltersTheorie=[407.0459 410.1932 807.0737 893.1254 799.3719 889.6308 257.9497];
+FiltersExp=[405 408.25 804.75 893.25 796.5 889.5];
+FiltersExpFout=[5 5 6.25 8.75 12 10.5 21.5]
+
+variabele=arrayfun(@(x) 1/x, FiltersExp);
+FiltersExpFout=arrayfun(@(x,y) (1/(x^2))*y,FiltersExp,FiltersExpFout);
+Rfout=[5 5 0.5 0.5 0.5 0.5 5];
+foutPunten=arrayfun(@(x,y) sqrt(x^2+y^2),Rfout,FiltersExpFout);
+%We leggen extra gewicht op het punt (0,0) gezien de plot theoretisch door
+%dit punt zou moeten gaan
+xWaarden=[ 1./FiltersExp];
+yWaarden=[3910 3880 1972 1782 1991 1789 6170];
+
+coef=polyfit(xWaarden,yWaarden,1);
+voorlopigeC=(1/(2*pi*coef(1)));
+
+%Lineaire fit uitvoeren.
+kZoekrange=linspace(coef(1)-2854944.34,coef(1)+2854944.34,10000);
+nk=length(kZoekrange);
+fout0=inf;
+for ik=1:nk
+    Ymod=arrayfun(@(x) kZoekrange(ik)*x,xWaarden);
+    fout=chi2var(length(xWaarden),1,yWaarden,Ymod,foutPunten);
+    if fout<fout0
+        fout0=fout;
+        kBest=kZoekrange(ik); 
+    end
+end
+sFilterModelDb=arrayfun(@(x) kBest*x,xWaarden);
+voorlopigeC=(1/(2*pi*kBest));
+
+kZoekrange=linspace(kBest-kBest/2,kBest+kBest/2,nk);
+chi_k=ones(size(kZoekrange));
+for ik=1:nk
+    Ymod=arrayfun(@(x) kZoekrange(ik)*x,xWaarden);
+    chi_k(ik)=chi2var(length(xWaarden),1,yWaarden,Ymod,foutPunten);
+end
+
+%Nu bepalen we de variantie op de parameter.
+Pk=polyfit(kZoekrange([4998 4999 5000]),chi_k([4998 4999 5000]),2);
+fitparabool_k=polyval(Pk,kZoekrange);
+Min_k=min(fitparabool_k);
+fitparabool_k=fitparabool_k/Min_k;
+kromming_k=2*Pk(1);
+sigma_k=1/sqrt(length(xWaarden)*kromming_k/2);
+sigma_c=sigma_k/(2*pi*(kBest^2)); % 1.199274646407248e-11
+cBest=1/(2*pi*kBest); %1.0006e-07
+
+%figuur
+plot(kZoekrange,fitparabool_k)
+hold off
+xlabel('\alpha')
+ylabel('\chi^2')
+title('Variance curve of the parameter \alpha.')
+
+%Nu de waarden voor R.
+Rwaarden=arrayfun(@(x) kBest*x,variabele);
+R=arrayfun(@(x,y) sqrt(((1/x)^2)*(sigma_k^2)+((kBest/x)^2)*y^2),FiltersExp,FiltersExpFout);
+
+%figuur
+weerstanden=[3910 3880 1972 1780 1991 1789 6170]
+scatter(xWaarden,weerstanden)
+hold on
+plot(xWaarden,sFilterModelDb)
+hold off
+xlabel('1/f_c')
+ylabel('R')
+title('R in function of 1/f_c.')
+legend('Datapoint','Best fit')
