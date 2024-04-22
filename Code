@@ -1,0 +1,15 @@
+function [S] = blok(t, dutycycle, hoogte, periode)
+%De functie bepaalt de waarde in de blokfunctie met een dutycycle, hoogte
+%en periode.
+%   t; list, lijst van tijdwaarden
+tau = periode*dutycycle;
+S = zeros(1,length(t));
+for i = 1:length(t)
+    n = floor(t(i)/periode);
+    S(i) = -hoogte;
+    if (n*periode <= t(i)) && (t(i) <= n*periode + tau)
+        S(i) = hoogte;
+    end
+end
+end
+
